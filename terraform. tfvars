@@ -1,0 +1,19 @@
+# ==================== Proyecto y Ambiente ====================
+project_name = "integrator-v1"
+environment  = "dev"
+
+# ==================== Credenciales OCI ====================
+tenancy_ocid     = "TU_TENANCY_OCID"
+user_ocid        = "TU_USER_OCID"
+fingerprint      = "TU_FINGERPRINT"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "us-ashburn-1"
+
+# ==================== Compartment y Red ====================
+compartment_ocid = "ocid1.compartment.oc1..aaaaaaaaswbxg4qrsmc54zigpev3uf2iaoyxaqtjpp4vylrdxhlc7iq7uzfa"
+vcn_cidr         = "10.0.0.0/16"
+subnet_cidr      = "10.0.2.0/24"
+
+# ==================== Imagen y SSH ====================
+image_ocid     = "ocid1.image.oc1.iad.aaaaaaaaqoeodp5azjlglyddmmsnkncciwtrrof7gz7xhe3ikeibnmnahqga"
+ssh_public_key = "PEGA_AQUI_TU_PUBLIC_KEY"
