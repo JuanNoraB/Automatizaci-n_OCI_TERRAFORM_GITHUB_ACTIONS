@@ -16,4 +16,4 @@ subnet_cidr      = "10.0.2.0/24"
 
 # ==================== Imagen y SSH ====================
 image_ocid     = "ocid1.image.oc1.iad.aaaaaaaaqoeodp5azjlglyddmmsnkncciwtrrof7gz7xhe3ikeibnmnahqga"
-ssh_public_key = "PEGA_AQUI_TU_PUBLIC_KEY"
+ssh_public_key = "xxxxx"
