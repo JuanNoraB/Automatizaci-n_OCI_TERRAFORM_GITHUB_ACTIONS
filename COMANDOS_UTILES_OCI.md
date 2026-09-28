@@ -4,7 +4,7 @@
 <COMPARTMENT_OCID> = ocid1.compartment.oc1..aaaaaaaaswbxg4qrsmc54zigpev3uf2iaoyxaqtjpp4vylrdxhlc7iq7uzfa
 <VCN_OCID> = ocid1.vcn.oc1.iad.amaaaaaaiap4fzyajelzqsmgocclr3ufyn6awiefrinpyvaczrzxpry5drjq
 <INSTANCE_OCID> = ocid1.instance.oc1.iad.anuwcljsiap4fzyckckctnhbwwngkdrgpxr2r4fu7urx45gryorsgo3r7i4a
-
+<VNIC_OCID>
 Para listar VCN:
 oci network vcn list --compartment-id <COMPARTMENT_OCID>
 
@@ -29,3 +29,5 @@ oci compute instance get --instance-id <INSTANCE_OCID>
 Y si quieres el VNIC/IP pública:
 oci compute vnic-attachment list --compartment-id <COMPARTMENT_OCID> --instance-id <INSTANCE_OCID>
 oci network vnic get --vnic-id <VNIC_OCID>
+
+oci compute vnic-attachment list --compartment-id ocid1.compartment.oc1..aaaaaaaaswbxg4qrsmc54zigpev3uf2iaoyxaqtjpp4vylrdxhlc7iq7uzfa --instance-id ocid1.instance.oc1.iad.anuwcljsiap4fzyckckctnhbwwngkdrgpxr2r4fu7urx45gryorsgo3r7i4a

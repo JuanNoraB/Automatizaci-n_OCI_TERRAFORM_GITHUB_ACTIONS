@@ -1,3 +1,4 @@
+# "¿con qué nube voy a hablar y con qué credenciales?"
 terraform {
   required_version = ">= 1.5.0"
 
