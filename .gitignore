@@ -2,7 +2,7 @@
 *.tfstate.*
 crash.log
 crash.*.log
-
+terraform.tfvars
 # Providers descargados por `terraform init`
 .terraform/
 .terraform.lock.hcl
