@@ -45,11 +45,8 @@ Guardar el archivo `.pem` descargado en `C:\Users\<USUARIO>\.oci\` (crear la car
 ## 5. Clonar el repositorio
 
 ```powershell
-git clone https://github.com/JuanNoraB/Automatizaci-n_OCI_TERRAFORM_GITHUB_ACTIONS.git MEGAMXI
-cd MEGAMXI
+git clone https://github.com/JuanNoraB/Automatizaci-n_OCI_TERRAFORM_GITHUB_ACTIONS.git 
 ```
-
-Si el repositorio es privado, Git abrirá el navegador para iniciar sesión en GitHub.
 
 ## 6. Editar `terraform.tfvars`
 
