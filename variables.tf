@@ -1,3 +1,5 @@
+# Defini que variables existen que tipo son y su valor por defecto
+# no existen valores reales sono son definiciones de que forma deben tener
 # ==================== Credenciales OCI ====================
 variable "tenancy_ocid" {} # Cuenta principal/empresa completa dentro de OCI.
 variable "user_ocid" {}
@@ -5,27 +7,64 @@ variable "fingerprint" {}
 variable "private_key_path" {}
 variable "region" {}
 
-# ==================== Recursos compartidos ====================
-variable "compartment_ocid" {} # En qué compartment se crean los recursos (compartido por todas las empresas).
-variable "image_ocid" {}       # La imagen de sistema operativo de la VM (compartida por todas las empresas).
+# ==================== Proyecto y Ambiente ====================
+variable "project_name" {
+  description = "Nombre del proyecto/empresa. Cada cliente tiene su propia copia de esta carpeta con su propio project_name."
+  type        = string
+}
 
-# ==================== Empresas / Clientes ====================
-# Cada entrada del mapa crea su propia VCN + Subnet + Security List + VM,
-# totalmente aislada de las demás empresas. La key del mapa (ej: "isagen-prod")
-# se usa como nombre único para todos los recursos de esa empresa.
-variable "empresas" {
-  description = "Mapa de empresas/clientes. Cada una genera su propia infraestructura aislada."
-  type = map(object({
-    vcn_cidr                = string # Rango IP de la VCN de esta empresa. Ejemplo: 10.0.0.0/16
-    subnet_cidr             = string # Rango IP de la subred de esta empresa. Ejemplo: 10.0.2.0/24
-    vcn_dns_label           = string # Único, solo letras/números, máx 15 caracteres.
-    subnet_dns_label        = string # Único, solo letras/números, máx 15 caracteres.
-    vm_hostname_label       = string # Único, solo letras/números, máx 15 caracteres.
-    ssh_public_key          = string # Llave SSH pública para acceder a la VM de esta empresa.
-    shape                   = optional(string, "VM.Standard.A1.Flex")
-    ocpus                   = optional(number, 4)
-    memory_in_gbs           = optional(number, 24)
-    boot_volume_size_in_gbs = optional(number, 100)
-    boot_volume_vpus_per_gb = optional(number, 10) # 10 = Balanced, 20 = High Performance.
-  }))
+variable "environment" {
+  description = "Ambiente: dev, staging, prod"
+  type        = string
+}
+
+# ==================== Recursos ====================
+variable "compartment_ocid" {} # En qué compartment se crean los recursos.
+variable "vcn_cidr" {}         # El rango IP de la red grande. Ejemplo: 10.0.0.0/16
+variable "subnet_cidr" {}      # El rango IP de la subred. Ejemplo: 10.0.2.0/24
+variable "ssh_public_key" {}   # La llave pública que se inyecta en la VM para que luego entres por SSH.
+variable "image_ocid" {}       # La imagen de sistema operativo de la VM. Ubuntu 22.04 Minimal aarch64.
+
+# Únicos por cliente/VM. Solo letras/números, sin guiones, máx 15 caracteres.
+variable "vcn_dns_label" {}
+variable "subnet_dns_label" {}
+variable "vm_hostname_label" {}
+
+variable "shape" {
+  description = "Tipo de instancia"
+  default     = "VM.Standard.A1.Flex"
+}
+
+variable "ocpus" {
+  description = "Número de OCPUs"
+  default     = 2
+}
+
+variable "memory_in_gbs" {
+  description = "Memoria RAM en GB"
+  default     = 12
+}
+
+variable "boot_volume_size_in_gbs" {
+  description = "Tamaño del disco en GB"
+  default     = 100
+}
+
+variable "boot_volume_vpus_per_gb" {
+  description = "10 = Balanced, 20 = High Performance. Nivel de rendimiento del disco."
+  default     = 10
+}
+
+# ==================== Locals ====================
+locals {
+  name_prefix = "${var.project_name}-${var.environment}"
+
+  # Nombres de recursos (puedes sobrescribir estas variables si quieres nombres personalizados)
+  vcn_name              = "${local.name_prefix}-vcn"
+  subnet_name           = "${local.name_prefix}-subnet-public"
+  internet_gateway_name = "${local.name_prefix}-igw"
+  route_table_name      = "${local.name_prefix}-rt"
+  security_list_name    = "${local.name_prefix}-sl"
+  instance_name         = "${local.name_prefix}-vm"
+  vnic_name             = "${local.name_prefix}-vnic"
 }

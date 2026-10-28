@@ -1,0 +1,31 @@
+# Estado de Terraform (cada computadora/cliente genera el suyo, NUNCA se sube)
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Providers descargados por `terraform init`
+.terraform/
+.terraform.lock.hcl
+
+# Planes guardados y overrides locales
+*.tfplan
+tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Llaves privadas (jamas al repo)
+*.pem
+*.key
+id_rsa
+id_rsa.*
+oci_vm_key
+oci_vm_key.*
+
+# Basura del sistema / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
