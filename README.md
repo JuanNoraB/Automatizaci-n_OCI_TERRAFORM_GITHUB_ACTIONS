@@ -41,7 +41,6 @@ Se necesitan estos valores de la consola de OCI (https://cloud.oracle.com/):
 
 Guardar el archivo `.pem` descargado en `C:\Users\<USUARIO>\.oci\` (crear la carpeta si no existe).
 
-**Si es la misma cuenta de OCI que ya se usa en este repositorio:** `tenancy_ocid`, `user_ocid`, `region` y `compartment_ocid` ya están en `terraform.tfvars`. Solo hacen falta el `.pem` y su `fingerprint`.
 
 ## 5. Clonar el repositorio
 
