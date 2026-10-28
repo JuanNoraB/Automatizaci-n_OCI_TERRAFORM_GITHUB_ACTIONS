@@ -32,7 +32,8 @@ El repositorio contiene cinco archivos de Terraform:
 |---|---|
 | `provider.tf` | Define la versión requerida de Terraform y del proveedor `oracle/oci`, así como las credenciales con las que Terraform se autentica en OCI. |
 | `variables.tf` | Declara las variables de entrada (tipo, descripción y valor por defecto) y los nombres derivados de los recursos (`locals`). |
-| `terraform.tfvars` | Contiene los valores reales de cada cliente. **Es el único archivo que se edita para un cliente nuevo.** |
+| `terraform.tfvars.example` | Plantilla con valores de ejemplo (`xxx`). Se copia como `terraform.tfvars`. |
+| `terraform.tfvars` | Contiene los valores reales de cada cliente. **Es el único archivo que se edita para un cliente nuevo.** No se sube al repositorio (`.gitignore`). |
 | `main.tf` | Declara los recursos de OCI que se crean y la relación entre ellos. |
 | `outputs.tf` | Define los datos que Terraform muestra al finalizar (IP pública e identificadores). |
 
@@ -341,7 +342,13 @@ git clone https://github.com/JuanNoraB/Automatizaci-n_OCI_TERRAFORM_GITHUB_ACTIO
 cd MEGAMXI
 ```
 
-### 7.2 Editar `terraform.tfvars`
+### 7.2 Crear y editar `terraform.tfvars`
+
+El archivo `terraform.tfvars` no está en el repositorio (está en `.gitignore`). Se crea a partir de la plantilla:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+```
 
 Modificar las variables indicadas en las secciones [4.1](#41-variables-que-se-deben-modificar-para-un-cliente-nuevo) y [4.2](#42-variables-que-se-modifican-solo-si-cambia-la-cuenta-de-oci-o-la-red).
 
@@ -424,7 +431,7 @@ La VM puede tardar entre 2 y 3 minutos en aceptar conexiones después de finaliz
 
 ## 9. Seguridad
 
-- `terraform.tfvars` contiene identificadores de la cuenta de OCI (OCIDs) y el fingerprint. **El repositorio debe mantenerse privado.**
+- `terraform.tfvars` contiene identificadores de la cuenta de OCI (OCIDs) y el fingerprint, por eso está en `.gitignore` y no se sube al repositorio. Solo se versiona `terraform.tfvars.example` con valores `xxx`.
 - La llave privada de la API Key (`.pem`) y la llave privada SSH nunca deben incluirse en el repositorio. El archivo `.gitignore` bloquea `*.pem`, `*.key` y las llaves SSH habituales.
 - La variable `ssh_public_key` contiene únicamente la llave pública, que puede compartirse.
 - `terraform.tfstate` puede contener información sensible y por eso está excluido de Git. Debe respaldarse por un medio seguro.

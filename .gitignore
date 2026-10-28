@@ -7,6 +7,10 @@ terraform.tfvars
 .terraform/
 .terraform.lock.hcl
 
+# Valores reales de cada cliente (se crea a partir de terraform.tfvars.example)
+terraform.tfvars
+*.auto.tfvars
+
 # Planes guardados y overrides locales
 *.tfplan
 tfplan

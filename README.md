@@ -48,9 +48,12 @@ Guardar el archivo `.pem` descargado en `C:\Users\<USUARIO>\.oci\` (crear la car
 git clone https://github.com/JuanNoraB/Automatizaci-n_OCI_TERRAFORM_GITHUB_ACTIONS.git 
 ```
 
-## 6. Editar `terraform.tfvars`
+## 6. Crear y editar `terraform.tfvars`
+
+El repositorio incluye `terraform.tfvars.example` con valores de ejemplo (`xxx`). Copiarlo como `terraform.tfvars` (este archivo no se sube a GitHub) y editarlo:
 
 ```powershell
+copy terraform.tfvars.example terraform.tfvars
 notepad terraform.tfvars
 ```
 
