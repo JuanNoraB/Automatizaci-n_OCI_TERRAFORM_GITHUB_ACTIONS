@@ -1,194 +1,357 @@
-# Terraform OCI - Plantilla por cliente
+# Despliegue de infraestructura en Oracle Cloud (OCI) con Terraform
 
-Crea en Oracle Cloud (OCI) una red completa y una VM Ubuntu ARM para un cliente.
-**Una carpeta = un cliente.** Cada carpeta tiene su propio estado de Terraform, por eso no se pisan entre sí.
+Plantilla de Terraform que aprovisiona en Oracle Cloud Infrastructure (OCI) la infraestructura base de un cliente: una red virtual con acceso a Internet y una máquina virtual Ubuntu con arquitectura ARM.
 
-## Los 5 archivos que viven en Git
+Principio de operación: **una carpeta equivale a un cliente**. Terraform registra lo que crea en un archivo de estado local (`terraform.tfstate`) ubicado en la carpeta donde se ejecuta. Por ello, cada cliente debe disponer de su propia carpeta (o su propio clon del repositorio) para que sus recursos permanezcan aislados de los de otros clientes.
 
-| Archivo | Para qué sirve |
+## Contenido
+
+1. [Archivos del repositorio](#1-archivos-del-repositorio)
+2. [Arquitectura desplegada](#2-arquitectura-desplegada)
+3. [Detalle de los recursos (`main.tf`)](#3-detalle-de-los-recursos-maintf)
+4. [Referencia de variables](#4-referencia-de-variables)
+5. [Outputs](#5-outputs)
+6. [Prerrequisitos (Linux y Windows)](#6-prerrequisitos-linux-y-windows)
+7. [Procedimiento: crear un cliente nuevo](#7-procedimiento-crear-un-cliente-nuevo)
+8. [Gestión de múltiples clientes con Git](#8-gestión-de-múltiples-clientes-con-git)
+9. [Seguridad](#9-seguridad)
+10. [Límites del Free Tier de OCI](#10-límites-del-free-tier-de-oci)
+11. [Solución de problemas](#11-solución-de-problemas)
+12. [Eliminación de la infraestructura de un cliente](#12-eliminación-de-la-infraestructura-de-un-cliente)
+13. [Documentos relacionados](#13-documentos-relacionados)
+
+---
+
+## 1. Archivos del repositorio
+
+El repositorio contiene cinco archivos de Terraform:
+
+| Archivo | Función |
 |---|---|
-| `provider.tf` | Cómo Terraform se conecta a OCI |
-| `variables.tf` | Qué valores pueden cambiar (y sus defaults) |
-| `terraform.tfvars` | **Los valores reales del cliente. Es el único archivo que editas.** |
-| `main.tf` | Los recursos que se crean |
-| `outputs.tf` | Lo que se imprime al final (IP pública, IDs) |
+| `provider.tf` | Define la versión requerida de Terraform y del proveedor `oracle/oci`, así como las credenciales con las que Terraform se autentica en OCI. |
+| `variables.tf` | Declara las variables de entrada (tipo, descripción y valor por defecto) y los nombres derivados de los recursos (`locals`). No contiene valores reales. |
+| `terraform.tfvars` | Contiene los valores reales de cada cliente. **Es el único archivo que se edita para un cliente nuevo.** |
+| `main.tf` | Declara los recursos de OCI que se crean y la relación entre ellos. |
+| `outputs.tf` | Define los datos que Terraform muestra al finalizar (IP pública e identificadores). |
 
-Lo demás (`.terraform/`, `terraform.tfstate`, `.terraform.lock.hcl`, `*.pem`) lo ignora `.gitignore` y se genera en cada computadora.
+El archivo `.gitignore` excluye los archivos que cada equipo genera localmente o que no deben publicarse: `terraform.tfstate`, `.terraform/`, `.terraform.lock.hcl`, llaves privadas (`*.pem`, `*.key`) y planes guardados.
 
-## Qué recursos crea (detalle de `main.tf`)
+---
 
-Todos los nombres salen de `project_name` y `environment`. Por ejemplo, `MEGAMXI` + `prod` crea `MEGAMXI-prod-vcn`, `MEGAMXI-prod-vm`, etc. Los números de línea son de `main.tf`.
+## 2. Arquitectura desplegada
 
-### 1. Availability Domains (líneas 3-7)
-**Qué hace:** consulta las zonas disponibles en tu región. No crea nada.
-**Necesita:** `compartment_ocid`.
-**Resultado:** la lista de zonas (AD-1, AD-2, AD-3). La VM usa la primera.
+```
+Internet
+   |
+Internet Gateway
+   |
+Route Table (0.0.0.0/0 -> Internet Gateway)
+   |
+VCN (vcn_cidr)
+   |
+   +-- Security List (firewall)
+   |
+   +-- Subnet pública (subnet_cidr)
+          |
+          +-- VM Ubuntu ARM (IP pública)
+```
 
-### 2. VCN - Red principal (líneas 9-16)
-**Qué hace:** crea tu red privada grande en OCI.
-**Necesita:**
-- `compartment_ocid`: dónde crear la VCN.
-- `cidr_blocks = [vcn_cidr]`: rango de IPs. `10.0.0.0/16` son 65,536 direcciones.
-- `display_name = <project>-<env>-vcn`: nombre que verás en la consola.
-- `dns_label = vcn_dns_label`: etiqueta DNS, sin caracteres especiales.
+---
 
-### 3. Internet Gateway (líneas 18-24)
-**Qué hace:** la puerta para que tu red pueda acceder a internet.
-**Necesita:**
-- `compartment_ocid`.
-- `vcn_id`: **depende de la VCN** (`oci_core_vcn.this.id`).
-- `display_name = <project>-<env>-igw`.
-- `enabled = true`: activado desde el inicio.
+## 3. Detalle de los recursos (`main.tf`)
 
-**Dependencia:** no se puede crear sin la VCN.
+Todos los nombres de los recursos se construyen a partir de `project_name` y `environment`. Por ejemplo, con `project_name = "MEGAMXI"` y `environment = "prod"` se crean `MEGAMXI-prod-vcn`, `MEGAMXI-prod-vm`, etc. Los números de línea corresponden a `main.tf`.
 
-### 4. Route Table - Tabla de rutas (líneas 26-38)
-**Qué hace:** define cómo sale el tráfico de tu red hacia internet.
-**Necesita:**
-- `compartment_ocid`.
-- `vcn_id`: depende de la VCN.
-- `display_name = <project>-<env>-rt`.
-- **Una regla de ruta:** `destination = 0.0.0.0/0` (todo el tráfico a internet), con `network_entity_id` que **depende del Internet Gateway**.
+### 3.1 Availability Domains (líneas 3-7)
 
-**Dependencia:** necesita la VCN y el Internet Gateway.
+- **Tipo:** consulta (`data source`). No crea ningún recurso.
+- **Función:** obtiene la lista de dominios de disponibilidad (AD-1, AD-2, AD-3) de la región configurada.
+- **Parámetros requeridos:** `compartment_ocid`.
+- **Resultado:** la VM se despliega en el primer dominio de disponibilidad de la lista.
 
-### 5. Security List - Firewall (líneas 40-113)
-**Qué hace:** controla qué tráfico puede entrar y salir de tu red.
-**Necesita:**
-- `compartment_ocid`.
-- `vcn_id`: depende de la VCN.
-- `display_name = <project>-<env>-sl`.
+### 3.2 VCN: red virtual principal (líneas 9-16)
 
-**Reglas de tráfico SALIENTE (egress):**
-- Todo permitido (`protocol = "all"`) hacia `0.0.0.0/0`.
+- **Función:** crea la red virtual privada (Virtual Cloud Network) que contiene el resto de recursos de red.
+- **Parámetros:**
+  - `compartment_ocid`: compartment donde se crea la VCN.
+  - `cidr_blocks = [vcn_cidr]`: rango de direcciones IP de la red. Por ejemplo, `10.0.0.0/16` proporciona 65 536 direcciones.
+  - `display_name`: `<project_name>-<environment>-vcn`. Es el nombre que se muestra en la consola de OCI.
+  - `dns_label = vcn_dns_label`: etiqueta DNS de la VCN. Solo admite letras y números, sin guiones, con un máximo de 15 caracteres.
 
-**Reglas de tráfico ENTRANTE (ingress):**
+### 3.3 Internet Gateway (líneas 18-24)
 
-| Regla | Puerto / tipo | Origen |
+- **Función:** permite que los recursos de la VCN se comuniquen con Internet.
+- **Parámetros:**
+  - `compartment_ocid`.
+  - `vcn_id`: depende de la VCN (`oci_core_vcn.this.id`).
+  - `display_name`: `<project_name>-<environment>-igw`.
+  - `enabled = true`: el gateway queda habilitado desde su creación.
+- **Dependencias:** VCN.
+
+### 3.4 Route Table: tabla de rutas (líneas 26-38)
+
+- **Función:** define la salida del tráfico de la red hacia Internet.
+- **Parámetros:**
+  - `compartment_ocid`.
+  - `vcn_id`: depende de la VCN.
+  - `display_name`: `<project_name>-<environment>-rt`.
+  - Regla de ruta: `destination = 0.0.0.0/0` (todo el tráfico con destino a Internet) con `network_entity_id` igual al Internet Gateway (`oci_core_internet_gateway.this.id`).
+- **Dependencias:** VCN e Internet Gateway.
+
+### 3.5 Security List: reglas de firewall (líneas 40-113)
+
+- **Función:** controla el tráfico que puede entrar y salir de la subred.
+- **Parámetros:**
+  - `compartment_ocid`.
+  - `vcn_id`: depende de la VCN.
+  - `display_name`: `<project_name>-<environment>-sl`.
+
+**Tráfico saliente (egress):**
+
+| Protocolo | Destino | Descripción |
 |---|---|---|
-| SSH | TCP 22 | `0.0.0.0/0` (cualquier IP puede intentar conectarse) |
-| ICMP (ping) | tipo 3, código 4 | `0.0.0.0/0` |
-| ICMP interno | tipo 3 | `vcn_cidr` (tu propia VCN) |
+| Todos (`all`) | `0.0.0.0/0` | Se permite todo el tráfico saliente. |
+
+**Tráfico entrante (ingress):**
+
+| Regla | Protocolo y puerto | Origen |
+|---|---|---|
+| SSH | TCP 22 | `0.0.0.0/0` |
+| ICMP (tipo 3, código 4) | ICMP | `0.0.0.0/0` |
+| ICMP interno (tipo 3) | ICMP | `vcn_cidr` (la propia VCN) |
 | HTTP | TCP 80 | `0.0.0.0/0` |
 | HTTPS | TCP 443 | `0.0.0.0/0` |
 
-**Dependencia:** necesita la VCN.
+- **Dependencias:** VCN.
+- **Nota de seguridad:** el acceso SSH está abierto a cualquier dirección IP. Para entornos de producción se recomienda restringir el origen de la regla SSH a direcciones conocidas (ver [Seguridad](#9-seguridad)).
 
-### 6. Subnet - Subred pública (líneas 115-127)
-**Qué hace:** una sección específica dentro de tu VCN, donde vive la VM.
-**Necesita 8 cosas:**
-- `compartment_ocid`.
-- `vcn_id`: depende de la VCN.
-- `cidr_block = subnet_cidr`: rango de IPs de esta subred. `10.0.2.0/24` son 256 IPs.
-- `display_name = <project>-<env>-subnet-public`.
-- `dns_label = subnet_dns_label`.
-- `route_table_id`: depende de la Route Table.
-- `security_list_ids`: depende de la Security List.
-- `prohibit_public_ip_on_vnic = false` y `prohibit_internet_ingress = false`: las VMs pueden tener IP pública.
+### 3.6 Subnet pública (líneas 115-127)
 
-**Dependencia:** necesita la VCN, la Route Table y la Security List.
+- **Función:** segmento de la VCN en el que se aloja la VM. Permite asignar direcciones IP públicas.
+- **Parámetros:**
+  - `compartment_ocid`.
+  - `vcn_id`: depende de la VCN.
+  - `cidr_block = subnet_cidr`: rango de direcciones de la subred. Por ejemplo, `10.0.2.0/24` proporciona 256 direcciones. Debe estar contenido dentro de `vcn_cidr`.
+  - `display_name`: `<project_name>-<environment>-subnet-public`.
+  - `dns_label = subnet_dns_label`.
+  - `route_table_id`: depende de la Route Table.
+  - `security_list_ids`: depende de la Security List.
+  - `prohibit_internet_ingress = false` y `prohibit_public_ip_on_vnic = false`: permiten tráfico entrante desde Internet y la asignación de IP pública a las VMs.
+- **Dependencias:** VCN, Route Table y Security List.
 
-### 7. Instance - Máquina virtual (líneas 129-174)
-**Qué hace:** tu servidor/VM donde corren tus aplicaciones.
-**Necesita muchas cosas:**
+### 3.7 Instance: máquina virtual (líneas 129-174)
 
-**Básico (5):**
-- `compartment_ocid`.
-- `availability_domain`: depende de la consulta inicial (primera zona disponible).
-- `display_name = <project>-<env>-vm`.
-- `shape = VM.Standard.A1.Flex`: tipo de máquina (ARM).
-- `fault_domain = FAULT-DOMAIN-1`: para alta disponibilidad.
+- **Función:** servidor virtual donde se ejecutan las aplicaciones del cliente.
 
-**CPU y RAM (2):**
-- `ocpus` (por defecto 2): núcleos.
-- `memory_in_gbs` (por defecto 12): GB de RAM.
+**Parámetros generales:**
 
-**Red (3):**
-- `subnet_id`: depende de la Subnet.
-- `assign_public_ip = true`: se le asigna IP pública.
-- `display_name = <project>-<env>-vnic` y `hostname_label = vm_hostname_label`.
-
-**Acceso SSH (1):**
-- `ssh_authorized_keys = ssh_public_key`: la llave pública que se inyecta para que entres por SSH.
-
-**Sistema operativo y disco (3):**
-- `image_ocid`: imagen del sistema, por ejemplo Ubuntu 22.04 Minimal ARM.
-- `boot_volume_size_in_gbs` (por defecto 100): disco de 100 GB.
-- `boot_volume_vpus_per_gb` (por defecto 10): rendimiento balanceado (20 = alto rendimiento).
-
-**Seguridad y disponibilidad (2):**
-- `is_pv_encryption_in_transit_enabled = true`: encriptación en tránsito activada.
-- `recovery_action = RESTORE_INSTANCE`: si el host falla, la instancia se restaura.
-
-**Dependencia:** necesita la Subnet, que a su vez necesita todo lo anterior.
-
-### Orden de creación (dependencias)
-
-```
-1. Availability Domains (consulta)
-2. VCN
-3. Internet Gateway   (necesita VCN)
-4. Route Table        (necesita VCN + Internet Gateway)
-5. Security List      (necesita VCN)
-6. Subnet             (necesita VCN + Route Table + Security List)
-7. Instance / VM      (necesita Subnet + todo lo anterior)
-```
-
-Terraform crea los recursos en el orden correcto basándose en estas dependencias. Son **6 recursos nuevos** (los pasos 2 al 7) y una consulta (el paso 1).
-
-## Nuevo cliente: qué cambiar en `terraform.tfvars`
-
-| Variable | Qué hacer |
+| Parámetro | Valor |
 |---|---|
-| `project_name` | Nombre del cliente, por ejemplo `"MEGAMXI"` |
-| `environment` | `dev`, `staging` o `prod` |
-| `vcn_dns_label`, `subnet_dns_label`, `vm_hostname_label` | Únicos por cliente. Solo letras y números, sin guiones, máximo 15 caracteres |
-| `ssh_public_key` | Llave pública SSH del cliente (ver más abajo) |
-| `tenancy_ocid`, `user_ocid`, `fingerprint`, `private_key_path`, `region`, `compartment_ocid` | Cámbialos solo si el cliente usa otra cuenta, otro usuario o otro compartment de OCI |
-| `vcn_cidr`, `subnet_cidr` | Opcional. Cámbialos solo si vas a conectar redes entre sí |
+| `compartment_ocid` | Compartment donde se crea la VM. |
+| `availability_domain` | Primer dominio de disponibilidad obtenido en la consulta inicial. |
+| `display_name` | `<project_name>-<environment>-vm` |
+| `shape` | `VM.Standard.A1.Flex` (arquitectura ARM). |
+| `fault_domain` | `FAULT-DOMAIN-1` |
 
-> **Regla de oro:** nunca corras `terraform apply` en una carpeta que ya tiene el estado de otro cliente después de cambiar `project_name`. Terraform entendería que quieres renombrar o destruir lo existente. Para un cliente nuevo usa siempre una carpeta o un clone nuevo, donde no existe `terraform.tfstate`.
+**Capacidad de cómputo (`shape_config`):**
 
-## Prerrequisitos (Linux o Windows)
+| Parámetro | Valor por defecto | Descripción |
+|---|---|---|
+| `ocpus` | 2 | Número de núcleos. |
+| `memory_in_gbs` | 12 | Memoria RAM en GB. |
 
-1. **Terraform >= 1.5**
-   - Linux: https://developer.hashicorp.com/terraform/install
-   - Windows: `winget install Hashicorp.Terraform`, o descarga el `.zip` y agrega la carpeta al `PATH`. Abre una terminal nueva y verifica con `terraform -version`.
-2. **Git**
-3. **Credenciales de API de OCI** (no necesitas instalar la OCI CLI):
-   - Consola OCI: tu perfil, **User settings**, **Tokens and keys**, **Add API Key**, **Generate API Key Pair**.
-   - Descarga la llave privada `.pem` y copia el fingerprint que muestra OCI.
-   - Guarda el `.pem` **fuera del repo**:
-     - Linux: `~/.oci/mi_llave.pem` y luego `chmod 600 ~/.oci/mi_llave.pem`
-     - Windows: `C:\Users\TU_USUARIO\.oci\mi_llave.pem`
-4. **Llave SSH para entrar a la VM** (la pública va en `ssh_public_key`):
-   ```bash
-   ssh-keygen -t rsa -b 4096 -f ~/.ssh/oci_vm_key -C "cliente-vm-key"
-   ```
-   En Windows (PowerShell) es el mismo comando con `$HOME\.ssh\oci_vm_key`. Pega el contenido de `oci_vm_key.pub` en `ssh_public_key`.
+**Red (`create_vnic_details`):**
 
-## Paso a paso
+| Parámetro | Valor |
+|---|---|
+| `subnet_id` | Depende de la Subnet. |
+| `assign_public_ip` | `true` |
+| `display_name` | `<project_name>-<environment>-vnic` |
+| `hostname_label` | `vm_hostname_label` |
 
-### 1. Clonar
+**Acceso SSH (`metadata`):**
+
+- `ssh_authorized_keys = ssh_public_key`: llave pública que se instala en la VM para permitir el acceso por SSH.
+
+**Sistema operativo y disco (`source_details`):**
+
+| Parámetro | Valor por defecto | Descripción |
+|---|---|---|
+| `source_id` | `image_ocid` | Imagen del sistema operativo (por ejemplo, Ubuntu 22.04 Minimal aarch64). |
+| `boot_volume_size_in_gbs` | 100 | Tamaño del disco de arranque en GB. |
+| `boot_volume_vpus_per_gb` | 10 | Rendimiento del disco: 10 equivale a Balanced y 20 a High Performance. |
+
+**Seguridad y disponibilidad:**
+
+| Parámetro | Valor | Descripción |
+|---|---|---|
+| `is_pv_encryption_in_transit_enabled` | `true` | Cifrado en tránsito del volumen. |
+| `network_type` | `PARAVIRTUALIZED` | Tipo de interfaz de red. |
+| `recovery_action` | `RESTORE_INSTANCE` | Si el host falla, la instancia se restaura automáticamente. |
+
+- **Dependencias:** Subnet y, por extensión, todos los recursos anteriores.
+
+### 3.8 Orden de creación
+
+Terraform determina el orden de creación a partir de las dependencias entre recursos, sin que sea necesario indicarlo manualmente:
+
+```
+1. Availability Domains   (consulta)
+2. VCN
+3. Internet Gateway       (requiere VCN)
+4. Route Table            (requiere VCN e Internet Gateway)
+5. Security List          (requiere VCN)
+6. Subnet                 (requiere VCN, Route Table y Security List)
+7. Instance (VM)          (requiere Subnet y los recursos anteriores)
+```
+
+En total se crean **6 recursos** (pasos 2 al 7) y se ejecuta una consulta (paso 1).
+
+---
+
+## 4. Referencia de variables
+
+Todas las variables se declaran en `variables.tf` y sus valores se asignan en `terraform.tfvars`.
+
+### 4.1 Variables que se deben modificar para un cliente nuevo
+
+| Variable | Descripción | Ejemplo |
+|---|---|---|
+| `project_name` | Nombre del cliente. Forma parte del nombre de todos los recursos. | `"MEGAMXI"` |
+| `environment` | Ambiente: `dev`, `staging` o `prod`. | `"prod"` |
+| `vcn_dns_label` | Etiqueta DNS de la VCN. Solo letras y números, sin guiones, máximo 15 caracteres. | `"megamxiprodvcn"` |
+| `subnet_dns_label` | Etiqueta DNS de la subred. Mismas restricciones. | `"megamxiprodsub"` |
+| `vm_hostname_label` | Nombre de host de la VM. Mismas restricciones. | `"megamxiprodvm"` |
+| `ssh_public_key` | Llave pública SSH del cliente (contenido del archivo `.pub`). | `"ssh-rsa AAAA... cliente-vm-key"` |
+
+### 4.2 Variables que se modifican solo si cambia la cuenta de OCI o la red
+
+| Variable | Descripción | Cuándo modificarla |
+|---|---|---|
+| `tenancy_ocid` | Identificador de la cuenta principal (tenancy) de OCI. | Si el cliente utiliza otro tenancy. |
+| `user_ocid` | Identificador del usuario de OCI. | Si se utiliza otro usuario. |
+| `fingerprint` | Huella de la API Key del usuario. | Si se utiliza otra API Key. |
+| `private_key_path` | Ruta local a la llave privada `.pem` de la API Key. | Depende de cada computadora (ver [sección 7.2](#72-editar-terraformtfvars)). |
+| `region` | Región de OCI. | Si se despliega en otra región. |
+| `compartment_ocid` | Compartment donde se crean los recursos. | Si el cliente utiliza otro compartment. |
+| `vcn_cidr` | Rango IP de la VCN (por ejemplo, `10.0.0.0/16`). | Solo si se prevé interconectar redes. |
+| `subnet_cidr` | Rango IP de la subred (por ejemplo, `10.0.2.0/24`). Debe estar dentro de `vcn_cidr`. | Solo si se prevé interconectar redes. |
+| `image_ocid` | Imagen del sistema operativo. **Es específica de cada región.** | Si se cambia de región o de sistema operativo. |
+
+### 4.3 Variables con valor por defecto
+
+| Variable | Valor por defecto | Descripción |
+|---|---|---|
+| `shape` | `VM.Standard.A1.Flex` | Tipo de instancia. |
+| `ocpus` | `2` | Número de OCPUs. |
+| `memory_in_gbs` | `12` | Memoria RAM en GB. |
+| `boot_volume_size_in_gbs` | `100` | Tamaño del disco de arranque en GB. |
+| `boot_volume_vpus_per_gb` | `10` | Rendimiento del disco: 10 (Balanced) o 20 (High Performance). |
+
+Estas variables se pueden sobrescribir en `terraform.tfvars` si el cliente requiere otra capacidad.
+
+---
+
+## 5. Outputs
+
+Al finalizar `terraform apply`, y en cualquier momento con `terraform output`, se muestran los siguientes valores:
+
+| Output | Descripción |
+|---|---|
+| `public_ip` | Dirección IP pública de la VM. |
+| `instance_id` | OCID de la instancia. |
+| `vcn_id` | OCID de la VCN. |
+| `subnet_id` | OCID de la subred. |
+
+---
+
+## 6. Prerrequisitos (Linux y Windows)
+
+### 6.1 Terraform (versión 1.5 o superior)
+
+- **Linux:** seguir las instrucciones de https://developer.hashicorp.com/terraform/install
+- **Windows:** ejecutar `winget install Hashicorp.Terraform`, o descargar el archivo `.zip` desde el sitio oficial y agregar su carpeta a la variable de entorno `PATH`.
+
+Se debe abrir una terminal nueva y verificar la instalación:
+
+```bash
+terraform -version
+```
+
+### 6.2 Git
+
+Necesario para clonar el repositorio. Verificar con `git --version`.
+
+### 6.3 Credenciales de API de OCI
+
+No es necesario instalar la OCI CLI; Terraform se autentica directamente con la API Key.
+
+1. Ingresar a la consola de OCI: https://cloud.oracle.com/
+2. Abrir el perfil de usuario: **User settings**, **Tokens and keys**.
+3. En la sección **API Keys**, seleccionar **Add API Key** y luego **Generate API Key Pair**.
+4. Descargar la llave privada (archivo `.pem`).
+5. Seleccionar **Add** y copiar el **fingerprint** que muestra OCI (formato `aa:bb:cc:...`).
+6. Obtener también `tenancy_ocid`, `user_ocid` y `compartment_ocid` desde la consola de OCI.
+7. Guardar el archivo `.pem` **fuera del repositorio**:
+
+| Sistema | Ubicación recomendada | Permisos |
+|---|---|---|
+| Linux | `~/.oci/mi_llave.pem` | `chmod 600 ~/.oci/mi_llave.pem` |
+| Windows | `C:\Users\<USUARIO>\.oci\mi_llave.pem` | No aplica |
+
+### 6.4 Llave SSH para acceder a la VM
+
+Se debe generar un par de llaves. La llave **pública** se registra en `ssh_public_key` y la **privada** se conserva para conectarse a la VM.
+
+```bash
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/oci_vm_key -C "cliente-vm-key"
+```
+
+En Windows (PowerShell) se utiliza el mismo comando, sustituyendo la ruta por `$HOME\.ssh\oci_vm_key`. El cliente OpenSSH está incluido en Windows 10 y versiones posteriores.
+
+El contenido del archivo `oci_vm_key.pub` se copia en la variable `ssh_public_key` de `terraform.tfvars`.
+
+---
+
+## 7. Procedimiento: crear un cliente nuevo
+
+### 7.1 Clonar el repositorio en una carpeta nueva
+
+Se debe clonar en una carpeta con el nombre del cliente. Una carpeta nueva no contiene `terraform.tfstate`, por lo que Terraform no conoce ningún recurso previo.
 
 ```bash
 git clone https://github.com/JuanNoraB/Automatizaci-n_OCI_TERRAFORM_GITHUB_ACTIONS.git MEGAMXI
 cd MEGAMXI
 ```
 
-### 2. Editar `terraform.tfvars`
+### 7.2 Editar `terraform.tfvars`
 
-Cambia las variables de la tabla de arriba. Ojo con `private_key_path`, que depende de la computadora:
+Modificar las variables indicadas en las secciones [4.1](#41-variables-que-se-deben-modificar-para-un-cliente-nuevo) y [4.2](#42-variables-que-se-modifican-solo-si-cambia-la-cuenta-de-oci-o-la-red).
+
+La variable `private_key_path` depende del equipo:
 
 ```hcl
 # Linux
 private_key_path = "~/.oci/mi_llave.pem"
 
-# Windows: usa la ruta completa y barras normales "/" (no "\")
-private_key_path = "C:/Users/TU_USUARIO/.oci/mi_llave.pem"
+# Windows: ruta completa con barras normales ("/"), no con barras invertidas ("\")
+private_key_path = "C:/Users/<USUARIO>/.oci/mi_llave.pem"
 ```
 
-### 3. Inicializar, revisar y aplicar
+Ejemplo mínimo de los valores que cambian para un cliente nuevo:
+
+```hcl
+project_name = "MEGAMXI"
+environment  = "prod"
+
+vcn_dns_label     = "megamxiprodvcn"
+subnet_dns_label  = "megamxiprodsub"
+vm_hostname_label = "megamxiprodvm"
+
+ssh_public_key = "ssh-rsa AAAA... cliente-vm-key"
+```
+
+### 7.3 Inicializar, revisar y aplicar
 
 ```bash
 terraform init
@@ -196,50 +359,104 @@ terraform plan
 terraform apply
 ```
 
-- Antes de escribir `yes`, mira el resumen del `plan`. En una carpeta nueva debe decir `Plan: 6 to add, 0 to change, 0 to destroy`.
-- Si dice cualquier cosa distinta de `0 to destroy`, **no apliques** y revisa que estás en la carpeta correcta.
+| Comando | Función |
+|---|---|
+| `terraform init` | Descarga el proveedor de OCI y prepara la carpeta de trabajo. |
+| `terraform plan` | Muestra los cambios que se realizarían, sin ejecutarlos. |
+| `terraform apply` | Crea los recursos. Solicita confirmación escribiendo `yes`. |
 
-### 4. Conectarte a la VM
+**Verificación previa a la confirmación:** el resumen de `terraform plan` en una carpeta nueva debe indicar:
+
+```
+Plan: 6 to add, 0 to change, 0 to destroy.
+```
+
+Si el resumen indica cualquier valor distinto de `0 to destroy`, **no se debe aplicar**. Esto significa que la carpeta contiene el estado de otro cliente o que existe un error en las variables.
+
+### 7.4 Verificar y conectarse a la VM
 
 ```bash
 terraform output public_ip
 ssh -i ~/.ssh/oci_vm_key ubuntu@<IP_PUBLICA>
 ```
 
-Espera 2 o 3 minutos después del `apply`. En Windows usa `ssh -i $HOME\.ssh\oci_vm_key ubuntu@<IP_PUBLICA>`.
+En Windows (PowerShell):
 
-## Trabajar con varios clientes y Git
+```powershell
+ssh -i $HOME\.ssh\oci_vm_key ubuntu@<IP_PUBLICA>
+```
 
-- El estado (`terraform.tfstate`) **no está en Git**. Cada computadora solo conoce lo que ella misma creó.
-- Si clonas en otra computadora y usas los mismos valores que un cliente existente, Terraform intentará crear todo de nuevo y fallará por nombres o DNS duplicados. Cambia siempre `project_name` y los DNS labels.
-- Para no pisar la plantilla en `main`, usa una rama por cliente:
+La VM puede tardar entre 2 y 3 minutos en aceptar conexiones después de finalizar `terraform apply`. Los recursos también se pueden verificar en la consola de OCI:
+
+- **Networking**, **Virtual Cloud Networks**: VCN del cliente.
+- **Compute**, **Instances**: VM del cliente.
+
+---
+
+## 8. Gestión de múltiples clientes con Git
+
+- El archivo de estado `terraform.tfstate` **no se almacena en Git**. Cada computadora solo conoce los recursos que ella misma creó.
+- Si se clona el repositorio en otro equipo y se utilizan los valores de un cliente ya desplegado, Terraform intentará crear todos los recursos nuevamente y fallará por nombres o etiquetas DNS duplicados. Para cada cliente nuevo deben cambiarse siempre `project_name` y las tres etiquetas DNS.
+- Para no modificar la plantilla de la rama `main`, se recomienda utilizar una rama por cliente:
+
   ```bash
   git checkout -b cliente-megamxi
   ```
-  Edita ahí el `terraform.tfvars` y haz commit de los cambios en esa rama, no en `main`.
-- **Respalda el `terraform.tfstate`** de cada cliente. Si lo pierdes, Terraform olvida lo que creó y tendrías que importar los recursos a mano o borrarlos desde la consola de OCI.
 
-## Seguridad
+  Los cambios en `terraform.tfvars` se registran en esa rama y no en `main`.
+- **Se debe respaldar el archivo `terraform.tfstate` de cada cliente.** Si se pierde, Terraform deja de conocer los recursos creados y será necesario importarlos manualmente (`terraform import`) o eliminarlos desde la consola de OCI.
+- No se debe ejecutar `terraform apply` en una carpeta que contiene el estado de un cliente después de cambiar `project_name`. Terraform interpretaría el cambio como una modificación de los recursos existentes y los renombraría o destruiría.
 
-- El repo contiene `terraform.tfvars` con OCIDs y fingerprint. **Mantén el repositorio privado.**
-- Nunca subas el `.pem`. `.gitignore` ya lo bloquea.
-- Para pruebas, `ssh_public_key` es solo la llave pública, que sí se puede compartir.
-- La Security List abre SSH (22) a `0.0.0.0/0`. En producción restringe ese origen a tu IP.
+---
 
-## Límites del Free Tier de OCI
+## 9. Seguridad
 
-- A1 Flex: máximo 4 OCPU y 24 GB de RAM **en total por tenancy**. Con los defaults (2 OCPU y 12 GB) caben 2 clientes.
-- Disco: máximo 200 GB en total, y cada VM usa 100 GB por defecto.
+- `terraform.tfvars` contiene identificadores de la cuenta de OCI (OCIDs) y el fingerprint. **El repositorio debe mantenerse privado.**
+- La llave privada de la API Key (`.pem`) y la llave privada SSH nunca deben incluirse en el repositorio. El archivo `.gitignore` bloquea `*.pem`, `*.key` y las llaves SSH habituales.
+- La variable `ssh_public_key` contiene únicamente la llave pública, que puede compartirse.
+- `terraform.tfstate` puede contener información sensible y por eso está excluido de Git. Debe respaldarse por un medio seguro.
+- La Security List permite SSH (puerto 22) desde `0.0.0.0/0`. En producción se recomienda restringir el campo `source` de esa regla en `main.tf` a las direcciones IP autorizadas.
 
-## Destruir un cliente
+---
 
-Dentro de la carpeta de ese cliente (la que tiene su `terraform.tfstate`):
+## 10. Límites del Free Tier de OCI
+
+- **Instancias A1 Flex:** máximo de 4 OCPU y 24 GB de RAM **en total por tenancy**. Con los valores por defecto (2 OCPU y 12 GB por VM) caben 2 clientes en el mismo tenancy.
+- **Almacenamiento en bloque:** máximo de 200 GB en total. Cada VM utiliza 100 GB por defecto.
+
+Si se excede alguno de estos límites, la creación de la VM falla.
+
+---
+
+## 11. Solución de problemas
+
+| Síntoma | Causa probable | Acción |
+|---|---|---|
+| `401-NotAuthenticated` | `fingerprint`, `user_ocid`, `tenancy_ocid` o `private_key_path` incorrectos, o llave privada que no corresponde a la API Key registrada. | Verificar los valores y que el `.pem` corresponda al fingerprint. En Windows, verificar la ruta con barras normales. |
+| `404-NotAuthorizedOrNotFound` | El usuario no tiene permisos sobre el compartment, o `compartment_ocid` es incorrecto. | Verificar el OCID del compartment y las políticas del usuario. |
+| Error por `dns_label` o `hostname_label` | Etiqueta con guiones, de más de 15 caracteres o ya usada en la misma VCN. | Utilizar solo letras y números, con un máximo de 15 caracteres. |
+| Error por nombres duplicados o recursos que ya existen | Se usaron los valores de un cliente ya desplegado. | Cambiar `project_name` y las etiquetas DNS. |
+| `Out of host capacity` al crear la VM | No hay capacidad A1 disponible en el dominio de disponibilidad. | Reintentar más tarde o cambiar de región. |
+| `LimitExceeded` | Se excedió un límite de servicio del tenancy (ver [sección 10](#10-límites-del-free-tier-de-oci)). | Reducir `ocpus`, `memory_in_gbs` o el tamaño del disco, o eliminar otras instancias. |
+| Error de imagen no encontrada | `image_ocid` pertenece a otra región. | Utilizar una imagen disponible en la región configurada. |
+| `Permission denied (publickey)` al conectarse por SSH | La llave privada usada no corresponde a `ssh_public_key`. | Utilizar la llave privada del par cuya llave pública se registró. |
+| `terraform` no se reconoce como comando (Windows) | La instalación no está en el `PATH` o la terminal estaba abierta durante la instalación. | Abrir una terminal nueva o agregar Terraform al `PATH`. |
+
+---
+
+## 12. Eliminación de la infraestructura de un cliente
+
+Se debe ejecutar dentro de la carpeta de ese cliente, es decir, la que contiene su `terraform.tfstate`:
 
 ```bash
 terraform destroy
 ```
 
-## Otros documentos
+Terraform lista los recursos que se eliminarán y solicita confirmación escribiendo `yes`. **La operación elimina todos los recursos del cliente y no es reversible.** Antes de confirmar se debe verificar que la carpeta corresponde al cliente correcto.
 
-- `CONFIGURACION_INICIAL.md`: guía inicial para obtener las credenciales de OCI.
+---
+
+## 13. Documentos relacionados
+
+- `CONFIGURACION_INICIAL.md`: guía para obtener las credenciales de OCI.
 - `COMANDOS_UTILES_OCI.md`: comandos de la OCI CLI para listar recursos.
