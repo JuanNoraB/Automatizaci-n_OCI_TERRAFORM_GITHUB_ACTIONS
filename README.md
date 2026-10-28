@@ -15,18 +15,126 @@ Crea en Oracle Cloud (OCI) una red completa y una VM Ubuntu ARM para un cliente.
 
 Lo demás (`.terraform/`, `terraform.tfstate`, `.terraform.lock.hcl`, `*.pem`) lo ignora `.gitignore` y se genera en cada computadora.
 
-## Qué recursos crea
+## Qué recursos crea (detalle de `main.tf`)
 
-Terraform los crea en este orden, según sus dependencias:
+Todos los nombres salen de `project_name` y `environment`. Por ejemplo, `MEGAMXI` + `prod` crea `MEGAMXI-prod-vcn`, `MEGAMXI-prod-vm`, etc. Los números de línea son de `main.tf`.
 
-1. VCN (red principal, `vcn_cidr`)
-2. Internet Gateway
-3. Route Table (`0.0.0.0/0` hacia el Internet Gateway)
-4. Security List (entrada: SSH 22, HTTP 80, HTTPS 443, ICMP; salida: todo)
-5. Subnet pública (`subnet_cidr`)
-6. VM `VM.Standard.A1.Flex` con IP pública (por defecto 2 OCPU, 12 GB RAM, 100 GB de disco)
+### 1. Availability Domains (líneas 3-7)
+**Qué hace:** consulta las zonas disponibles en tu región. No crea nada.
+**Necesita:** `compartment_ocid`.
+**Resultado:** la lista de zonas (AD-1, AD-2, AD-3). La VM usa la primera.
 
-Todos los nombres salen de `project_name` y `environment`. Por ejemplo, `MEGAMXI` + `prod` crea `MEGAMXI-prod-vcn`, `MEGAMXI-prod-vm`, etc.
+### 2. VCN - Red principal (líneas 9-16)
+**Qué hace:** crea tu red privada grande en OCI.
+**Necesita:**
+- `compartment_ocid`: dónde crear la VCN.
+- `cidr_blocks = [vcn_cidr]`: rango de IPs. `10.0.0.0/16` son 65,536 direcciones.
+- `display_name = <project>-<env>-vcn`: nombre que verás en la consola.
+- `dns_label = vcn_dns_label`: etiqueta DNS, sin caracteres especiales.
+
+### 3. Internet Gateway (líneas 18-24)
+**Qué hace:** la puerta para que tu red pueda acceder a internet.
+**Necesita:**
+- `compartment_ocid`.
+- `vcn_id`: **depende de la VCN** (`oci_core_vcn.this.id`).
+- `display_name = <project>-<env>-igw`.
+- `enabled = true`: activado desde el inicio.
+
+**Dependencia:** no se puede crear sin la VCN.
+
+### 4. Route Table - Tabla de rutas (líneas 26-38)
+**Qué hace:** define cómo sale el tráfico de tu red hacia internet.
+**Necesita:**
+- `compartment_ocid`.
+- `vcn_id`: depende de la VCN.
+- `display_name = <project>-<env>-rt`.
+- **Una regla de ruta:** `destination = 0.0.0.0/0` (todo el tráfico a internet), con `network_entity_id` que **depende del Internet Gateway**.
+
+**Dependencia:** necesita la VCN y el Internet Gateway.
+
+### 5. Security List - Firewall (líneas 40-113)
+**Qué hace:** controla qué tráfico puede entrar y salir de tu red.
+**Necesita:**
+- `compartment_ocid`.
+- `vcn_id`: depende de la VCN.
+- `display_name = <project>-<env>-sl`.
+
+**Reglas de tráfico SALIENTE (egress):**
+- Todo permitido (`protocol = "all"`) hacia `0.0.0.0/0`.
+
+**Reglas de tráfico ENTRANTE (ingress):**
+
+| Regla | Puerto / tipo | Origen |
+|---|---|---|
+| SSH | TCP 22 | `0.0.0.0/0` (cualquier IP puede intentar conectarse) |
+| ICMP (ping) | tipo 3, código 4 | `0.0.0.0/0` |
+| ICMP interno | tipo 3 | `vcn_cidr` (tu propia VCN) |
+| HTTP | TCP 80 | `0.0.0.0/0` |
+| HTTPS | TCP 443 | `0.0.0.0/0` |
+
+**Dependencia:** necesita la VCN.
+
+### 6. Subnet - Subred pública (líneas 115-127)
+**Qué hace:** una sección específica dentro de tu VCN, donde vive la VM.
+**Necesita 8 cosas:**
+- `compartment_ocid`.
+- `vcn_id`: depende de la VCN.
+- `cidr_block = subnet_cidr`: rango de IPs de esta subred. `10.0.2.0/24` son 256 IPs.
+- `display_name = <project>-<env>-subnet-public`.
+- `dns_label = subnet_dns_label`.
+- `route_table_id`: depende de la Route Table.
+- `security_list_ids`: depende de la Security List.
+- `prohibit_public_ip_on_vnic = false` y `prohibit_internet_ingress = false`: las VMs pueden tener IP pública.
+
+**Dependencia:** necesita la VCN, la Route Table y la Security List.
+
+### 7. Instance - Máquina virtual (líneas 129-174)
+**Qué hace:** tu servidor/VM donde corren tus aplicaciones.
+**Necesita muchas cosas:**
+
+**Básico (5):**
+- `compartment_ocid`.
+- `availability_domain`: depende de la consulta inicial (primera zona disponible).
+- `display_name = <project>-<env>-vm`.
+- `shape = VM.Standard.A1.Flex`: tipo de máquina (ARM).
+- `fault_domain = FAULT-DOMAIN-1`: para alta disponibilidad.
+
+**CPU y RAM (2):**
+- `ocpus` (por defecto 2): núcleos.
+- `memory_in_gbs` (por defecto 12): GB de RAM.
+
+**Red (3):**
+- `subnet_id`: depende de la Subnet.
+- `assign_public_ip = true`: se le asigna IP pública.
+- `display_name = <project>-<env>-vnic` y `hostname_label = vm_hostname_label`.
+
+**Acceso SSH (1):**
+- `ssh_authorized_keys = ssh_public_key`: la llave pública que se inyecta para que entres por SSH.
+
+**Sistema operativo y disco (3):**
+- `image_ocid`: imagen del sistema, por ejemplo Ubuntu 22.04 Minimal ARM.
+- `boot_volume_size_in_gbs` (por defecto 100): disco de 100 GB.
+- `boot_volume_vpus_per_gb` (por defecto 10): rendimiento balanceado (20 = alto rendimiento).
+
+**Seguridad y disponibilidad (2):**
+- `is_pv_encryption_in_transit_enabled = true`: encriptación en tránsito activada.
+- `recovery_action = RESTORE_INSTANCE`: si el host falla, la instancia se restaura.
+
+**Dependencia:** necesita la Subnet, que a su vez necesita todo lo anterior.
+
+### Orden de creación (dependencias)
+
+```
+1. Availability Domains (consulta)
+2. VCN
+3. Internet Gateway   (necesita VCN)
+4. Route Table        (necesita VCN + Internet Gateway)
+5. Security List      (necesita VCN)
+6. Subnet             (necesita VCN + Route Table + Security List)
+7. Instance / VM      (necesita Subnet + todo lo anterior)
+```
+
+Terraform crea los recursos en el orden correcto basándose en estas dependencias. Son **6 recursos nuevos** (los pasos 2 al 7) y una consulta (el paso 1).
 
 ## Nuevo cliente: qué cambiar en `terraform.tfvars`
 
