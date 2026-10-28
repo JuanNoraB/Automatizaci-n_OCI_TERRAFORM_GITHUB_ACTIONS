@@ -9,12 +9,6 @@ Los comandos se ejecutan en **PowerShell**. Para el detalle técnico completo ve
 
 ## 1. Instalar Terraform y Git
 
-```powershell
-winget install --id Hashicorp.Terraform -e
-winget install --id Git.Git -e
-```
-
-Cerrar PowerShell y abrir una ventana nueva.
 
 ## 2. Verificar la instalación
 
@@ -23,8 +17,6 @@ terraform -version
 git --version
 ```
 
-Ambos comandos deben mostrar una versión (Terraform 1.5 o superior).
-
 ## 3. Crear la llave SSH (para conectarse a la VM)
 
 ```powershell
@@ -32,11 +24,8 @@ New-Item -ItemType Directory -Force "$HOME\.ssh"
 ssh-keygen -t rsa -b 4096 -f "$HOME\.ssh\oci_vm_key" -C "oci-vm-key"
 ```
 
-Presionar Enter dos veces (sin contraseña). Mostrar la llave pública, que se usará en el paso 6:
+Presionar Enter dos veces (sin contraseña).
 
-```powershell
-Get-Content "$HOME\.ssh\oci_vm_key.pub"
-```
 
 ## 4. Obtener los datos de OCI
 
