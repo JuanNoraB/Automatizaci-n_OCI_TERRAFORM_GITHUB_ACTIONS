@@ -12,7 +12,7 @@ resource "oci_core_vcn" "this" {
   compartment_id = var.compartment_ocid
   cidr_blocks    = [var.vcn_cidr]
   display_name   = local.vcn_name
-  dns_label      = var.vcn_dns_label
+  dns_label      = local.vcn_dns_label
 }
 
 # ==================== Puerta a Internet ====================
@@ -119,7 +119,7 @@ resource "oci_core_subnet" "this" {
   vcn_id                     = oci_core_vcn.this.id
   cidr_block                 = var.subnet_cidr
   display_name               = local.subnet_name
-  dns_label                  = var.subnet_dns_label
+  dns_label                  = local.subnet_dns_label
   route_table_id             = oci_core_route_table.this.id
   security_list_ids          = [oci_core_security_list.this.id]
   prohibit_internet_ingress  = false
@@ -146,7 +146,7 @@ resource "oci_core_instance" "this" {
     subnet_id        = oci_core_subnet.this.id
     assign_public_ip = true
     display_name     = local.vnic_name
-    hostname_label   = var.vm_hostname_label
+    hostname_label   = local.vm_hostname_label
   }
 
   # Llave SSH para acceder a la VM

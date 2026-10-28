@@ -1,6 +1,7 @@
 # se llenan las variables declaradas en variables.tf
 # Esta carpeta es la PLANTILLA de un cliente. Para un cliente nuevo: copia toda la carpeta
-# y cambia project_name + credenciales + vcn_cidr/subnet_cidr + ssh_public_key.
+# y cambia project_name + environment + ssh_public_key (+ credenciales OCI si es otra cuenta).
+# Los nombres de recursos y las etiquetas DNS se generan solos a partir de project_name + environment.
 
 # ==================== Proyecto y Ambiente ====================
 project_name = "INSAGEN"
@@ -17,11 +18,6 @@ region           = "us-ashburn-1"
 compartment_ocid = "ocid1.compartment.oc1..aaaaaaaanu6fe32jvlpzauz5rhmg5okqexcipuzoqzhxff72xsyy7yxnii4q"
 vcn_cidr         = "10.0.0.0/16"
 subnet_cidr      = "10.0.2.0/24"
-
-# ==================== DNS Labels (únicos, máx 15 caracteres) ====================
-vcn_dns_label     = "insagenprodvcn"
-subnet_dns_label  = "insagenprodsub"
-vm_hostname_label = "insagenprodvm"
 
 # ==================== Imagen y SSH ====================
 image_ocid     = "ocid1.image.oc1.iad.aaaaaaaaqoeodp5azjlglyddmmsnkncciwtrrof7gz7xhe3ikeibnmnahqga"

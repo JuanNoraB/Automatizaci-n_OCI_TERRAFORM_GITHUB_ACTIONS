@@ -25,10 +25,25 @@ variable "subnet_cidr" {}      # El rango IP de la subred. Ejemplo: 10.0.2.0/24
 variable "ssh_public_key" {}   # La llave pública que se inyecta en la VM para que luego entres por SSH.
 variable "image_ocid" {}       # La imagen de sistema operativo de la VM. Ubuntu 22.04 Minimal aarch64.
 
-# Únicos por cliente/VM. Solo letras/números, sin guiones, máx 15 caracteres.
-variable "vcn_dns_label" {}
-variable "subnet_dns_label" {}
-variable "vm_hostname_label" {}
+# Opcionales. Si no se definen, se generan solos a partir de project_name + environment (ver locals).
+# Solo letras/números, sin guiones, máx 15 caracteres.
+variable "vcn_dns_label" {
+  description = "Etiqueta DNS de la VCN. Opcional: por defecto <project_name><environment>vcn."
+  type        = string
+  default     = null
+}
+
+variable "subnet_dns_label" {
+  description = "Etiqueta DNS de la subnet. Opcional: por defecto <project_name><environment>sub."
+  type        = string
+  default     = null
+}
+
+variable "vm_hostname_label" {
+  description = "Hostname de la VM. Opcional: por defecto <project_name><environment>vm."
+  type        = string
+  default     = null
+}
 
 variable "shape" {
   description = "Tipo de instancia"
@@ -67,4 +82,10 @@ locals {
   security_list_name    = "${local.name_prefix}-sl"
   instance_name         = "${local.name_prefix}-vm"
   vnic_name             = "${local.name_prefix}-vnic"
+
+  # Etiquetas DNS: minúsculas, solo letras/números, base de máx 12 caracteres (límite de OCI: 15)
+  dns_base          = substr(lower(replace("${var.project_name}${var.environment}", "/[^a-zA-Z0-9]/", "")), 0, 12)
+  vcn_dns_label     = coalesce(var.vcn_dns_label, "${local.dns_base}vcn")
+  subnet_dns_label  = coalesce(var.subnet_dns_label, "${local.dns_base}sub")
+  vm_hostname_label = coalesce(var.vm_hostname_label, "${local.dns_base}vm")
 }
