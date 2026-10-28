@@ -31,7 +31,7 @@ El repositorio contiene cinco archivos de Terraform:
 | Archivo | Función |
 |---|---|
 | `provider.tf` | Define la versión requerida de Terraform y del proveedor `oracle/oci`, así como las credenciales con las que Terraform se autentica en OCI. |
-| `variables.tf` | Declara las variables de entrada (tipo, descripción y valor por defecto) y los nombres derivados de los recursos (`locals`). No contiene valores reales. |
+| `variables.tf` | Declara las variables de entrada (tipo, descripción y valor por defecto) y los nombres derivados de los recursos (`locals`). |
 | `terraform.tfvars` | Contiene los valores reales de cada cliente. **Es el único archivo que se edita para un cliente nuevo.** |
 | `main.tf` | Declara los recursos de OCI que se crean y la relación entre ellos. |
 | `outputs.tf` | Define los datos que Terraform muestra al finalizar (IP pública e identificadores). |

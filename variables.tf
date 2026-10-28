@@ -1,5 +1,4 @@
 # Defini que variables existen que tipo son y su valor por defecto
-# no existen valores reales sono son definiciones de que forma deben tener
 # ==================== Credenciales OCI ====================
 variable "tenancy_ocid" {} # Cuenta principal/empresa completa dentro de OCI.
 variable "user_ocid" {}

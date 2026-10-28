@@ -1,4 +1,3 @@
-# Estado de Terraform (cada computadora/cliente genera el suyo, NUNCA se sube)
 *.tfstate
 *.tfstate.*
 crash.log
