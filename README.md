@@ -50,7 +50,7 @@ git clone https://github.com/JuanNoraB/Automatizaci-n_OCI_TERRAFORM_GITHUB_ACTIO
 
 ## 6. Crear y editar `terraform.tfvars`
 
-El repositorio incluye `terraform.tfvars.example` con valores de ejemplo (`xxx`). Copiarlo como `terraform.tfvars` (este archivo no se sube a GitHub) y editarlo:
+El repositorio incluye `terraform.tfvars.example` con valores de ejemplo (`xxx`). Copiarlo como `terraform.tfvars` y configurarlo:
 
 ```powershell
 copy terraform.tfvars.example terraform.tfvars
@@ -68,7 +68,7 @@ Cambiar estos valores:
 | `fingerprint` | El del paso 4. |
 | `tenancy_ocid`, `user_ocid`, `region`, `compartment_ocid` | Solo si el cliente usa otra cuenta o compartment de OCI (paso 4). |
 
-Con `project_name` y `environment` se generan solos los nombres de todos los recursos y las etiquetas DNS (por ejemplo `MEGAMXI-prod-vcn`, `MEGAMXI-prod-vm`). No hay que cambiar nada más.
+Con `project_name` y `environment` se generan solos los nombres de todos los recursos y las etiquetas DNS (por ejemplo `MEGAMXI-prod-vcn`, `MEGAMXI-prod-vm`).
 
 ## 7. Crear la infraestructura
 
@@ -89,13 +89,10 @@ terraform output public_ip
 ssh -i "$HOME\.ssh\oci_vm_key" ubuntu@<IP_PUBLICA>
 ```
 
-La VM puede tardar 2 o 3 minutos en aceptar conexiones.
 
 ---
 
 ## Notas
 
-- **Nunca** subir a Git el archivo `.pem`, las llaves SSH ni `terraform.tfstate` (ya están en `.gitignore`).
 - Respaldar el `terraform.tfstate` de cada cliente: sin él, Terraform no sabe qué recursos creó.
 - Para eliminar los recursos de un cliente, ejecutar `terraform destroy` dentro de su carpeta.
-- Para no modificar la plantilla de `main`, trabajar en una rama por cliente: `git checkout -b cliente-megamxi`.
